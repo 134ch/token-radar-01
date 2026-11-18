@@ -180,6 +180,71 @@
     });
   }
 
+  // CSV export: the rows the reader currently sees, as a spreadsheet.
+  // The export reads the same filtered, sorted list the table shows,
+  // so a search, a category filter, or a sort change is reflected in
+  // the file. It writes plain comma-separated values, one row per
+  // protocol, with no network call and no extra dependency.
+  function csvEscapeCell(value) {
+    if (value === null || value === undefined) return '';
+    var text = String(value);
+    if (/[",\n\r]/.test(text)) return '"' + text.replace(/"/g, '""') + '"';
+    return text;
+  }
+  function csvHeader() {
+    return ['rank', 'name', 'category', 'chains', 'tvl_usd', 'implied_value_usd', 'growth_7d_pct'].join(',');
+  }
+  function csvRowFor(row) {
+    var implied = row.implied_value_usd !== undefined && row.implied_value_usd !== null
+      ? row.implied_value_usd
+      : row.mcap_usd;
+    var growth = row.change_7d === null || row.change_7d === undefined ? '' : row.change_7d;
+    return [
+      csvEscapeCell(row.rank === undefined ? 'live' : row.rank),
+      csvEscapeCell(row.name),
+      csvEscapeCell(row.category || 'Other'),
+      csvEscapeCell((row.chains || []).join('; ')),
+      csvEscapeCell(row.tvl_usd),
+      csvEscapeCell(implied),
+      csvEscapeCell(growth),
+    ].join(',');
+  }
+  function visibleRowsForExport() {
+    // The live tab has no rank or implied value, so its rows export
+    // with their market cap in the implied-value column instead.
+    return state.tab === 'live' ? sortedRows(liveRows()) : sortedRows(rows());
+  }
+  function buildCsvText(list) {
+    var lines = [csvHeader()];
+    list.forEach(function (row) { lines.push(csvRowFor(row)); });
+    // A trailing newline keeps the last row readable in editors that
+    // expect every line, including the last, to end with one.
+    return lines.join('\r\n') + '\r\n';
+  }
+  function csvFileName() {
+    var stamp = (DATA.as_of || 'snapshot').replace(/[^0-9-]/g, '');
+    var tab = state.tab === 'live' ? 'live-token' : 'pre-token';
+    return 'token-radar-' + tab + '-' + stamp + '.csv';
+  }
+  function downloadCsvFile(text, fileName) {
+    var blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    // Revoke after the click so the browser has time to start the
+    // download before the object URL is released.
+    window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+  function exportCsv() {
+    var list = visibleRowsForExport();
+    if (list.length === 0) return;
+    downloadCsvFile(buildCsvText(list), csvFileName());
+  }
+
   function header() {
     return el('header', { class: 'top' },
       el('div', { class: 'brand' }, el('span', { class: 'mark' }), el('span', { class: 'brand-name', text: 'Token Radar' })),
@@ -442,6 +507,12 @@
     if (!dialog.isConnected) app.appendChild(dialog);
     if (state.selected) openDetail(state.selected);
   }
+
+  // The Export CSV button lives in index.html, outside the board the
+  // render function rebuilds, so it is wired once here and survives
+  // every filter change, sort change, and re-render.
+  var exportButton = document.getElementById('export-csv');
+  if (exportButton) exportButton.addEventListener('click', exportCsv);
 
   readHash();
   render();

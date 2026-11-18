@@ -205,6 +205,17 @@ export function ageDays(asOf: string, listedAt: string | null): number | null {
 
 /** The three multipliers and the implied value one protocol gets under `model`. */
 /** Chain diversity from the Herfindahl index, TVL assumed spread evenly over the chains named. */
+// Why a chain count changes a protocol's value at all:
+// a protocol that lives on one chain fails when that chain fails.
+// Its deposits, its users and its contracts all sit in one place,
+// so one outage, one bridge bug or one chain halt takes the whole
+// position down at once. Spreading the same TVL over several chains
+// does not make each chain safer, but it means no single chain can
+// wipe the position out, so the model pays a little more for spread.
+// The factor is deliberately small, 0.90 to 1.10, because chain
+// count is a weak signal: the snapshot never says how much TVL sits
+// on each chain, only which chains are named, so the model assumes
+// an even split and never lets this factor decide a ranking alone.
 export function diversityMultiplier(chainCount: number, model: ModelConstants): number {
   const n = Math.max(1, chainCount);
   const hhi = 1 / n;
@@ -212,6 +223,18 @@ export function diversityMultiplier(chainCount: number, model: ModelConstants): 
 }
 
 /** The growth the model uses: the raw 7d change, clamped, then capped at the sanity cap. */
+// Why one week of growth is never trusted at face value:
+// a 7-day TVL jump can be real demand, but in a snapshot it is
+// just as often a reclassification, a bridge inflow, a token
+// migration or a data revision, none of which says anything about
+// whether a token will launch or what it will be worth. A protocol
+// that jumps 4,448% in a week would otherwise outrank everything
+// on the board on the strength of one noisy week alone. Capping
+// the growth the model uses at +60% keeps that spike in its place:
+// the protocol still gets full credit for a strong week, and the
+// raw figure is kept alongside so a reader can see the spike and
+// judge it for themselves. The floor at -60% does the same job in
+// reverse, so one bad week cannot sink a protocol either.
 export function cappedGrowth(rawGrowth: number | null, model: ModelConstants): { growthPct: number; growthCapped: boolean } {
   if (rawGrowth === null) return { growthPct: 0, growthCapped: false };
   const hardCapped = Math.min(model.growth_cap, Math.max(model.growth_floor, rawGrowth));
@@ -219,11 +242,37 @@ export function cappedGrowth(rawGrowth: number | null, model: ModelConstants): {
 }
 
 /** Maturity from age: older protocols with no token score higher, up to the 3-year ceiling. */
+// Why age earns a premium, and why the premium stops growing:
+// a protocol that has run for years without launching a token has
+// survived audits, market cycles and user churn while staying
+// pre-token, which is exactly the history a farmer wants to see
+// before committing capital. A brand-new protocol has no such
+// record, so it scores lower even on the same TVL. The premium
+// is capped at three years because the fourth year of survival
+// tells a reader far less than the first: after three years the
+// protocol has already proved it can last, and extra age should
+// not keep pushing it up the board. When the snapshot carries no
+// listing date, the model uses 365 days, a neutral middle ground
+// that neither punishes nor rewards an unknown history.
 export function maturityMultiplier(age: number | null, model: ModelConstants): number {
   const ageForModel = age ?? model.unknown_age_days;
   return model.maturity_floor + (Math.min(Math.max(ageForModel, 0), model.maturity_days) / model.maturity_days) * model.maturity_range;
 }
 
+// How the four inputs combine into one number, and why the order
+// of the steps matters for reading the result:
+// first the base, TVL times a quarter, which is the model's whole
+// claim about what a pre-token protocol is worth relative to the
+// value already locked in it. Then the growth multiplier, built
+// from the capped growth, never the raw figure, so a spike cannot
+// leak into the value through a side door. Then maturity, then
+// diversity, each a small bounded factor, so no single signal can
+// more than double or halve the base on its own. The result is
+// rounded to whole dollars and floored at one dollar, because an
+// implied value of zero or a fraction of a dollar would read as a
+// judgement the model never made. Every input to this function is
+// returned alongside the result, so the dashboard can show its
+// working and a reader can recompute the row by hand.
 export function impliedValue(protocol: SnapshotProtocol, asOf: string, model: ModelConstants): { implied: number; growthPct: number; growthRawPct: number | null; growthCapped: boolean; growthMult: number; maturityMult: number; diversityMult: number; age: number | null } {
   const age = ageDays(asOf, protocol.listed_at);
   const rawGrowth = protocol.change_7d === null ? null : finite(protocol.change_7d, 0);
