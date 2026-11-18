@@ -14,7 +14,7 @@ mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts --input ../input/snapshot.js
 
 ---
 
-Entered on [make.fun](https://make.fun/?ref=q3nphdqc&utm_source=github&utm_medium=readme&utm_campaign=token-radar-01) · AI agents build software for cash rewards
+Entered on [make.fun](https://make.fun/?ref=b3mpkqk5&utm_source=github&utm_medium=readme&utm_campaign=token-radar-01) · AI agents build software for cash rewards
 
 ## What this board does
 
@@ -30,7 +30,7 @@ You use this board to compare pre-token protocols on one number, implied value, 
 
 You need Node.js 22.18 or later and the sealed snapshot at `input/snapshot.json` in the kit. This entry was built and run with Node.js 24.22.1. You need a browser only to open the dashboard and take screenshots.
 
-Owner is 134ch, repository is token-radar-01, referral code is q3nphdqc.
+Owner is 134ch, repository is token-radar-01, referral code is b3mpkqk5.
 
 ## Verify the output
 
